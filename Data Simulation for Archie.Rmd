@@ -1,0 +1,36 @@
+---
+title: "Data Simulation for Archie"
+author: "Ben Kesseler"
+date: "June 7, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Order Execution Rate Sampling Frequency
+
+Orders are executed based on when they come in, the complexity of the order, the
+system resources, and likely other factors as well. They vary somewhat in time
+to fully complete, but we are more interested in the rate at which they are
+exectuted (begun).
+
+## Initial Data Thoughts
+
+Based on what I've learned from Archie, there are two time series to create, and
+then combine: time and orders executed.
+
+### Time
+
+The measurement of orders executed will happen stochastically, but certain
+aspects of the distribution of the timing are known.
+
+* Mean time between measurements - 1s
+* Minimum time between measurements - 10ms
+* Maximum time between measurements - 2s
+
+I will convert this to a Weibull distribution, with estimated parameters
+chosen to attempt to have the 95th percentile be near 2, and the 1st percentile
+near 0.001 (10ms).
+
