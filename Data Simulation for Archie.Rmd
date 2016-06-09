@@ -7,6 +7,8 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+set.seed(3141)
+library(Hmisc)
 ```
 
 # Order Execution Rate Sampling Frequency
@@ -26,11 +28,100 @@ then combine: time and orders executed.
 The measurement of orders executed will happen stochastically, but certain
 aspects of the distribution of the timing are known.
 
-* Mean time between measurements - 1s
-* Minimum time between measurements - 10ms
-* Maximum time between measurements - 2s
+* Mean time between measurements:    1s
+* Minimum time between measurements: 10ms
+* Maximum time between measurements: 2s
 
 I will convert this to a Weibull distribution, with estimated parameters
 chosen to attempt to have the 95th percentile be near 2, and the 1st percentile
-near 0.001 (10ms).
+near 0.01 (10ms). I am choosing to use a shifted Weibull (location isn't 0), and
+actually allow negative values. I will replace all values less than 0.01 with
+0.01, to simulate a forced measurement minimum of 10ms.
 
+```{r TimeVectorCreation, fig.align = "center", fig.width = 10, fig.height = 10}
+
+t <- rweibull(604800, shape = 2.1, scale = 1.24) - 0.1 # location = -0.1
+t[t <= 0.01] <- 0.01
+
+t2 <- vector(mode = 'numeric', length = length(t) + 1)
+for (i in 2:length(t2)) {
+  t2[i] <- t2[i-1] + t[i-1]
+}
+
+# The range of possible values for the time between measurements
+range(t)
+
+# Statistics of t
+describe(t)
+
+# The distribution of t
+par(mfrow=c(2,1))
+plot(density(t),
+     main = "Probability Density of Time Distribution",
+     xlab = "Time Between Measurments in Seconds",
+     ylab = "Probability")
+hist(t, 
+     breaks = 100,
+     main = "Histogram of Time Distribution Differences",
+     xlab = "Time Between Measuements in Seconds",
+     ylab = "Count"
+     )
+```
+
+### Orders Executed
+
+A seemingly random number of orders will be executed within each time period. In
+reality, this number would be somewhat dependent on the time interval, with
+larger numbers of orders executed with larger time intervals, and smaller 
+numbers of orders executed with smaller intervals.
+
+I may attempt to create a correlation between length of time interval and the
+number of orders executed, but we'll see.
+
+The number of orders executed will happen stochastically, but certain
+aspects of the distribution of the number executed are known.
+
+* Mean number of orders executed between measurements:    1200
+* Minimum number of orders executed between measurements: 0
+* Maximum number of orders executed between measurements: 2000
+
+I will convert this to a Weibull distribution, with estimated parameters
+chosen to attempt to have the 99th percentile be near 2000, and the 
+1st percentile near 0. I am choosing to use a shifted Weibull 
+(location isn't 0), and actually allow negative values. I will replace all 
+values less than 0 with 0, to simulate a slight bump in number of instances at 
+0.
+
+```{r OrderVectorCreation, fig.align = "center", fig.width = 10, fig.height = 10}
+
+o <- rweibull(604801, shape = 7.483, scale = 3036) - 1650 # location = -1650
+o[o <= 0] <- 0
+
+# The range of possible values for the number of orders executed each period
+range(o)
+
+# Statistics of o
+describe(o)
+
+# The distribution of o
+par(mfrow=c(2,1))
+plot(density(o),
+     main = "Probability Density of Orders Executed Distribution",
+     xlab = "Orders Executed Each Period",
+     ylab = "Probability")
+hist(o, 
+     breaks = 100,
+     main = "Histogram of Orders Executed Distribution",
+     xlab = "Orders Executed Each Period",
+     ylab = "Count"
+     )
+```
+
+Now I will create the final dataset for analysis in Tableau.
+
+```{r TableauPrep}
+
+tableau <- cbind(t2, o)
+colnames(tableau) <- c("time", "orders executed")
+write.csv(tableau, "Archie_Tableau_Data.csv")
+```
