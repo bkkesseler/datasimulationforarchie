@@ -15,8 +15,8 @@ library(Hmisc)
 
 Orders are executed based on when they come in, the complexity of the order, the
 system resources, and likely other factors as well. They vary somewhat in time
-to fully complete, but we are more interested in the rate at which they are
-exectuted (begun).
+to fully complete and begin at semi-random times, but we are more interested in
+the rate at which they are executed (finished).
 
 ## Initial Data Thoughts
 
@@ -28,7 +28,7 @@ then combine: time and orders executed.
 The measurement of orders executed will happen stochastically, but certain
 aspects of the distribution of the timing are known.
 
-* Mean time between measurements:    1s
+* Mean time between measurements:    750ms
 * Minimum time between measurements: 10ms
 * Maximum time between measurements: 2s
 
@@ -40,7 +40,7 @@ actually allow negative values. I will replace all values less than 0.01 with
 
 ```{r TimeVectorCreation, fig.align = "center", fig.width = 10, fig.height = 10}
 
-t <- rweibull(604800, shape = 2.1, scale = 1.24) - 0.1 # location = -0.1
+t <- rweibull(24*60*60, shape = 1.97, scale = 0.96) - 0.1 # location = -0.1
 t[t <= 0.01] <- 0.01
 
 t2 <- vector(mode = 'numeric', length = length(t) + 1)
@@ -90,12 +90,14 @@ chosen to attempt to have the 99th percentile be near 2000, and the
 1st percentile near 0. I am choosing to use a shifted Weibull 
 (location isn't 0), and actually allow negative values. I will replace all 
 values less than 0 with 0, to simulate a slight bump in number of instances at 
-0.
+0. I will also take the floor of every value, because the number of orders
+executed cannot be a non-integer.
 
 ```{r OrderVectorCreation, fig.align = "center", fig.width = 10, fig.height = 10}
 
-o <- rweibull(604801, shape = 7.483, scale = 3036) - 1650 # location = -1650
+o <- rweibull(24*60*60, shape = 7.483, scale = 3036) - 1650 # location = -1650
 o[o <= 0] <- 0
+o <- floor(o)
 
 # The range of possible values for the number of orders executed each period
 range(o)
@@ -117,11 +119,69 @@ hist(o,
      )
 ```
 
-Now I will create the final dataset for analysis in Tableau.
+Now I will create the final raw dataset for analysis in Tableau.
 
-```{r TableauPrep}
+```{r TableauRawPrep}
 
-tableau <- cbind(t2, o)
+tableau <- as.data.frame(cbind(t2, o))
 colnames(tableau) <- c("time", "orders executed")
-write.csv(tableau, "Archie_Tableau_Data.csv")
+write.csv(tableau, "Archie_Tableau_Data.csv", row.names = FALSE)
+```
+
+In addition, I will create a set of data that represents the moving average of
+orders executed per second, based on measurements windows ranging from 50ms to
+5s in 50ms increments. So each measurement window will have a corresponding set
+of average orders executed per second.
+
+```{r WindowPresets}
+
+# I take the sum of orders executed less than the current time, and subtract
+# the sum for the previous time value, determining the number of orders executed
+# in that time interval.
+create_meas <- function(f_meas) {
+  current_meas <- f_meas
+  temp_meas <- seq(0, max(t2), f_meas)
+  temp_meas2 <- seq(0, max(t2), f_meas)
+  temp_meas[1] <- sum(tableau$`orders executed`[tableau$time < current_meas])
+  temp_meas2[1] <- sum(tableau$`orders executed`[tableau$time < current_meas])
+  for (i in 2:length(temp_meas)) {
+    temp_meas[i] <- sum(tableau$`orders executed`[tableau$time < current_meas])
+    temp_meas2[i] <- temp_meas[i] - temp_meas[i-1]
+    current_meas <- current_meas + f_meas
+  }
+  temp_meas2 <- temp_meas2 / f_meas
+  temp_meas3 <- rep(f_meas, length(temp_meas2))
+  temp_meas_out <- as.data.frame(cbind(temp_meas3, temp_meas2))
+  temp_meas_out
+}
+
+measure_list <- seq(0.250, 5.000, 0.250)
+
+averages <- create_meas(250)
+
+for (i in 2:length(measure_list)) {
+  meas_x <- create_meas(measure_list[i])
+  averages <- rbind(averages, meas_x)
+}
+
+colnames(averages) <- c("measurement interval", "orders executed per second")
+write.csv(averages, 
+          "Archie_Tableau_Datameas_500 <- create_meas(0.500).csv",
+          row.names = FALSE)
+```
+
+
+# Additional Resources
+
+* [Github Repository](https://github.com/bkkesseler/datasimulationforarchie)
+
+# Session Information
+
+- Toshiba Chromeboook 2 (2015)
+- 1.70 GHz Intel Celeron 3215U
+- 4GB RAM
+- RStudio Version 0.99.893
+
+```{r sessioninfo}
+sessionInfo()
 ```
