@@ -59,7 +59,8 @@ par(mfrow=c(2,1))
 plot(density(t),
      main = "Probability Density of Time Distribution",
      xlab = "Time Between Measurments in Seconds",
-     ylab = "Probability")
+     ylab = "Probability"
+     )
 hist(t, 
      breaks = 100,
      main = "Histogram of Time Distribution Differences",
@@ -95,7 +96,7 @@ executed cannot be a non-integer.
 
 ```{r OrderVectorCreation, fig.align = "center", fig.width = 10, fig.height = 10}
 
-o <- rweibull(24*60*60, shape = 7.483, scale = 3036) - 1650 # location = -1650
+o <- rweibull(24*60*60+1, shape = 7.483, scale = 3036) - 1650 # location = -1650
 o[o <= 0] <- 0
 o <- floor(o)
 
@@ -110,7 +111,8 @@ par(mfrow=c(2,1))
 plot(density(o),
      main = "Probability Density of Orders Executed Distribution",
      xlab = "Orders Executed Each Period",
-     ylab = "Probability")
+     ylab = "Probability"
+     )
 hist(o, 
      breaks = 100,
      main = "Histogram of Orders Executed Distribution",
@@ -138,38 +140,62 @@ of average orders executed per second.
 # I take the sum of orders executed less than the current time, and subtract
 # the sum for the previous time value, determining the number of orders executed
 # in that time interval.
+
 create_meas <- function(f_meas) {
   current_meas <- f_meas
-  temp_meas <- seq(0, max(t2), f_meas)
-  temp_meas2 <- seq(0, max(t2), f_meas)
+  time_intervals <- seq(0, ceiling(max(t2)), f_meas)
+  temp_meas <- time_intervals
+  temp_orders <- time_intervals
   temp_meas[1] <- sum(tableau$`orders executed`[tableau$time < current_meas])
-  temp_meas2[1] <- sum(tableau$`orders executed`[tableau$time < current_meas])
+  temp_orders[1] <- sum(tableau$`orders executed`[tableau$time < current_meas])
   for (i in 2:length(temp_meas)) {
     temp_meas[i] <- sum(tableau$`orders executed`[tableau$time < current_meas])
-    temp_meas2[i] <- temp_meas[i] - temp_meas[i-1]
+    temp_orders[i] <- temp_meas[i] - temp_meas[i-1]
     current_meas <- current_meas + f_meas
   }
-  temp_meas2 <- temp_meas2 / f_meas
-  temp_meas3 <- rep(f_meas, length(temp_meas2))
-  temp_meas_out <- as.data.frame(cbind(temp_meas3, temp_meas2))
+  temp_orders <- temp_orders / f_meas
+  measurement_interval <- rep(f_meas, length(temp_orders))
+  cumave <- cumsum(temp_orders) / seq_along(temp_orders)
+  temp_meas_out <- as.data.frame(cbind(measurement_interval,
+                                       time_intervals,
+                                       temp_orders,
+                                       cumave))
   temp_meas_out
 }
 
 measure_list <- seq(0.250, 5.000, 0.250)
 
-averages <- create_meas(250)
+ptm <- proc.time()
+averages <- create_meas(measure_list[1])
+elapsed_time_temp <- proc.time() - ptm
+elapsed_time <- elapsed_time_temp[3]
+message <- paste(measure_list[1], 
+                 "s interval completed in ",
+                 format(elapsed_time_temp[3]),
+                 "s. Total elapsed time: ",
+                 format(elapsed_time), "s.")
+print(message)
 
 for (i in 2:length(measure_list)) {
+  ptm <- proc.time()
   meas_x <- create_meas(measure_list[i])
   averages <- rbind(averages, meas_x)
+  elapsed_time_temp <- proc.time() - ptm
+  elapsed_time <- elapsed_time + elapsed_time_temp[3]
+  message <- paste(measure_list[i], 
+                   "s interval completed in ",
+                   format(elapsed_time_temp[3]),
+                   "s. Total elapsed time: ",
+                   format(elapsed_time), "s.")
+  print(message)
 }
 
-colnames(averages) <- c("measurement interval", "orders executed per second")
-write.csv(averages, 
-          "Archie_Tableau_Datameas_500 <- create_meas(0.500).csv",
-          row.names = FALSE)
+colnames(averages) <- c("measurement interval",
+                        "time",
+                        "orders executed per second",
+                        "cumulative average")
+write.csv(averages, "Archie_Tableau_Data_Average_Rates.csv")
 ```
-
 
 # Additional Resources
 
